@@ -140,9 +140,16 @@ brute_force_parallel <- function(x, W, parallel = FALSE) {
   )
 
   # 3.4 Evaluate the task chunks in parallel
-  chunk_results <- parallel::mclapply(
+  # Create a cluster
+  cl <- parallel::makeCluster(n_cores)
+
+  # Ensure the cluster is stopped when the function exits
+  on.exit(parallel::stopCluster(cl), add = TRUE)
+
+  chunk_results <- parallel::parLapply(
+    cl,
     mask_chunks,
-    function(mask_block) {
+    function(mask_block, x, W, n) {
 
       # 3.4.1 Initialize the local best solution for each worker
       local_best_val <- 0
@@ -181,9 +188,10 @@ brute_force_parallel <- function(x, W, parallel = FALSE) {
       ))
 
     },
-    mc.cores = n_cores
+    x,
+    W,
+    n
   )
-
   # 3.5 Combine the results obtained from all workers
   # Compare the local optimal solutions to find the global optimum
 

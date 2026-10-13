@@ -35,13 +35,16 @@ greedy_knapsack <- function(x, W){
   # 3.1 initial
   total_weight <- 0
   total_value <- 0
-  best_selects <- integer(0)
+  # Pre-allocate memory to improve performance
+  best_selects <- integer(nrow(x))
+  count <- 0L
   # 3.2 calculate until sum_w > W
   for (i in order_idx){
     if (total_weight+x$w[i] <= W){
        total_weight<- total_weight+x$w[i]
        total_value<-total_value+x$v[i]
-       best_selects<-c(best_selects,i)
+       count <- count + 1L
+       best_selects[count] <- i
     }else{
       # if don't setting which add the next one
       break
@@ -50,7 +53,7 @@ greedy_knapsack <- function(x, W){
   # 4. return the parameter
   return(list(
     value = round(total_value),
-    elements = best_selects
+    elements = best_selects[seq_len(count)]
   ))
 
 }

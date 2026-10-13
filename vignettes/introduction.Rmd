@@ -40,11 +40,7 @@ study three approaches with different performance characteristics:
 | `knapsack_dynamic()` | Yes | $O(nW)$ for integer capacity $W$ |
 | `greedy_knapsack()` | No | $O(n\log n)$ when sorting dominates |
 
-We test their correctness and runtime, profile bottlenecks using `profvis`, and
-compare an original and an optimised dynamic-programming implementation.
-We also investigate optional acceleration using Rcpp/C++ and parallel brute-force
-search. Benchmarks are reported separately from profiling so that speedups can
-be calculated from measured execution times rather than assumed.
+We test their correctness and runtime, profile bottlenecks using profvis. While we prototyped optimised dynamic‑programming and Rcpp‑accelerated versions locally, these are not shipped in the final package due to compatibility constraints. We also explore parallel brute‑force search. Benchmarks are reported separately from profiling so that speedups can be calculated from measured execution times rather than assumed.
 
 # 2 Data
 

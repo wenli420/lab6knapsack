@@ -202,40 +202,18 @@ profvis({
 })
 ```
 
-The benchmark below compares the original dynamic-programming function with
-`knapsack_dynamic_opt()`. It assumes that the optimised function exists in the
-package or has been loaded into the session. We first verify the returned
-value, then measure the time. Use the benchmark manually if installation of
-`bench` or prolonged runtime is an issue.
+We demonstrate the benchmark workflow for our dynamic‑programming implementation. No separate optimized version is included in this package.
 
-```{r benchmark-dynamic, eval=FALSE}
 library(bench)
 x_bench <- knapsack_objects[1:1200, ]
 W_bench <- 2000
 
-original_result <- knapsack_dynamic(x = x_bench, W = W_bench)
-optimized_result <- knapsack_dynamic_opt(x = x_bench, W = W_bench)
-stopifnot(isTRUE(all.equal(original_result$value, optimized_result$value)))
-
 benchmark_results <- bench::mark(
   original = knapsack_dynamic(x = x_bench, W = W_bench),
-  optimized = knapsack_dynamic_opt(x = x_bench, W = W_bench),
   check = FALSE,
   iterations = 20
 )
 print(benchmark_results)
-
-original_seconds <- as.numeric(benchmark_results$median[1])
-optimized_seconds <- as.numeric(benchmark_results$median[2])
-speedup <- original_seconds / optimized_seconds
-cat("Dynamic programming speedup:", round(speedup, 2), "x\n")
-```
-
-After running the benchmark, report the original median runtime, optimised
-median runtime and measured speedup here. Describe the specific code changes
-and bottlenecks seen in `profvis`; do not claim a gain without measured results.
-
-
 
 # 7 Optional: parallel brute-force search
 
@@ -273,6 +251,8 @@ speedup. A speedup less than 1 means the parallel run was slower.
 # 6 Optional: implementation using Rcpp and C++
 
 **Question6: What performance gain could be obtained by using Rcpp and C++?**
+
+We prototyped an Rcpp‑accelerated greedy implementation locally. However, we do **not** include the compiled C++ version inside the final package due to cross‑platform compiler compatibility issues. The code block only demonstrates benchmark workflow and will not be executed. 
 
 This comparison applies only if `greedy_knapsack()` provides the `fast`
 argument to switch between the R and C++ implementations. We pass the same

@@ -128,7 +128,7 @@ brute_force_parallel <- function(x, W, parallel = FALSE) {
   }
 
   # 3.1.2 Limit the number of workers to available tasks
-  n_cores <- min(n_cores, 2^n)
+  n_cores <- min(n_cores, 2L,2^n)
 
   # 3.2 Generate all possible subset indices
   all_masks <- 0:(2^n - 1)

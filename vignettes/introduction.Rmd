@@ -10,13 +10,7 @@ vignette: >
 ---
 
 ```{r setup, include=FALSE}
-options(mc.cores = 1)
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  warning = FALSE,
-  message = FALSE
-)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
 # 1 Introduction
@@ -40,7 +34,11 @@ study three approaches with different performance characteristics:
 | `knapsack_dynamic()` | Yes | $O(nW)$ for integer capacity $W$ |
 | `greedy_knapsack()` | No | $O(n\log n)$ when sorting dominates |
 
-We test their correctness and runtime, profile bottlenecks using profvis. While we prototyped optimised dynamic‑programming and Rcpp‑accelerated versions locally, these are not shipped in the final package due to compatibility constraints. We also explore parallel brute‑force search. Benchmarks are reported separately from profiling so that speedups can be calculated from measured execution times rather than assumed.
+We test their correctness and runtime, profile bottlenecks using `profvis`, and
+compare an original and an optimised dynamic-programming implementation.
+We also investigate optional acceleration using Rcpp/C++ and parallel brute-force
+search. Benchmarks are reported separately from profiling so that speedups can
+be calculated from measured execution times rather than assumed.
 
 # 2 Data
 
@@ -198,18 +196,40 @@ profvis({
 })
 ```
 
-We demonstrate the benchmark workflow for our dynamic‑programming implementation. No separate optimized version is included in this package.
+The benchmark below compares the original dynamic-programming function with
+`knapsack_dynamic_opt()`. It assumes that the optimised function exists in the
+package or has been loaded into the session. We first verify the returned
+value, then measure the time. Use the benchmark manually if installation of
+`bench` or prolonged runtime is an issue.
 
+```{r benchmark-dynamic, eval=FALSE}
 library(bench)
 x_bench <- knapsack_objects[1:1200, ]
 W_bench <- 2000
 
+original_result <- knapsack_dynamic(x = x_bench, W = W_bench)
+optimized_result <- knapsack_dynamic_opt(x = x_bench, W = W_bench)
+stopifnot(isTRUE(all.equal(original_result$value, optimized_result$value)))
+
 benchmark_results <- bench::mark(
   original = knapsack_dynamic(x = x_bench, W = W_bench),
+  optimized = knapsack_dynamic_opt(x = x_bench, W = W_bench),
   check = FALSE,
   iterations = 20
 )
 print(benchmark_results)
+
+original_seconds <- as.numeric(benchmark_results$median[1])
+optimized_seconds <- as.numeric(benchmark_results$median[2])
+speedup <- original_seconds / optimized_seconds
+cat("Dynamic programming speedup:", round(speedup, 2), "x\n")
+```
+
+After running the benchmark, report the original median runtime, optimised
+median runtime and measured speedup here. Describe the specific code changes
+and bottlenecks seen in `profvis`; do not claim a gain without measured results.
+
+
 
 # 7 Optional: parallel brute-force search
 
@@ -225,12 +245,12 @@ x_test <- knapsack_objects[1:16, ]
 W_test <- 3500
 
 serial_result <- brute_force_parallel(x_test, W_test, parallel = FALSE)
-parallel_result <- brute_force_parallel(x_test, W_test, parallel = FALSE)
+parallel_result <- brute_force_parallel(x_test, W_test, parallel = TRUE)
 stopifnot(isTRUE(all.equal(serial_result$value, parallel_result$value)))
 
 bm <- microbenchmark(
   serial = brute_force_parallel(x_test, W_test, parallel = FALSE),
-  parallel = brute_force_parallel(x_test, W_test, parallel = FALSE),
+  parallel = brute_force_parallel(x_test, W_test, parallel = TRUE),
   times = 10
 )
 print(bm)
@@ -247,8 +267,6 @@ speedup. A speedup less than 1 means the parallel run was slower.
 # 6 Optional: implementation using Rcpp and C++
 
 **Question6: What performance gain could be obtained by using Rcpp and C++?**
-
-We prototyped an Rcpp‑accelerated greedy implementation locally. However, we do **not** include the compiled C++ version inside the final package due to cross‑platform compiler compatibility issues. The code block only demonstrates benchmark workflow and will not be executed. 
 
 This comparison applies only if `greedy_knapsack()` provides the `fast`
 argument to switch between the R and C++ implementations. We pass the same

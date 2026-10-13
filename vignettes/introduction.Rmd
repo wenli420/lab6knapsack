@@ -1,0 +1,316 @@
+---
+title: "Lab report: the knapsack package"
+author: "Wenjuan Li and QianWen Yu"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Lab report: the knapsack package}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+options(mc.cores = 1)
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+# 1 Introduction
+
+The **0–1 knapsack problem** is a classical combinatorial optimisation problem.
+Given $n$ items with weight $w_i$ and value $v_i$, we choose whether to include
+each item ($x_i \in \{0,1\}$) to maximise the total value:
+
+$$
+\max \sum_{i=1}^{n} v_i x_i
+\quad\
+$$
+
+The problem is NP-hard. Exact approaches can therefore become computationally
+expensive for large inputs. In this lab we build the `knapsack` R package and
+study three approaches with different performance characteristics:
+
+| Algorithm | Exact? | Time complexity |
+|:--|:--:|:--|
+| `brute_force_knapsack()` | Yes | $O(2^n)$ |
+| `knapsack_dynamic()` | Yes | $O(nW)$ for integer capacity $W$ |
+| `greedy_knapsack()` | No | $O(n\log n)$ when sorting dominates |
+
+We test their correctness and runtime, profile bottlenecks using `profvis`, and
+compare an original and an optimised dynamic-programming implementation.
+We also investigate optional acceleration using Rcpp/C++ and parallel brute-force
+search. Benchmarks are reported separately from profiling so that speedups can
+be calculated from measured execution times rather than assumed.
+
+# 2 Data
+
+The package includes `knapsack_objects`, a reproducible data set with 2000 items.
+The code used to generate it is shown below for reference and is not rerun
+when knitting the vignette.
+
+```{r data-generation, eval=FALSE}
+suppressWarnings(RNGversion(min(as.character(getRversion()), "3.5.3")))
+set.seed(42, kind = "Mersenne-Twister", normal.kind = "Inversion")
+n <- 2000
+knapsack_objects <- data.frame(
+  w = sample(1:4000, size = n, replace = TRUE),
+  v = runif(n = n, 0, 10000)
+)
+# From the root of the package, save the data if it is not already included:
+# usethis::use_data(knapsack_objects, overwrite = TRUE)
+```
+
+```{r load-data}
+library(knapsack)
+data("knapsack_objects", package = "knapsack")
+stopifnot(exists("knapsack_objects"))
+head(knapsack_objects)
+```
+
+There are `r nrow(knapsack_objects)` items. Weights are integers from 1 to 4000,
+and values are generated uniformly between 0 and 10000.
+
+# 3 Three methods
+
+## 3.1 Brute-force search
+
+The brute-force method enumerates possible item subsets and selects the best
+feasible combination.
+
+```{r brute-force}
+brute_force_knapsack(x = knapsack_objects[1:8, ], W = 3500)
+brute_force_knapsack(x = knapsack_objects[1:12, ], W = 3500)
+brute_force_knapsack(x = knapsack_objects[1:8, ], W = 2000)
+brute_force_knapsack(x = knapsack_objects[1:12, ], W = 2000)
+```
+
+**Question 1: How much time does it take for $n=16$ objects?**
+
+```{r brute-force-time}
+bf_time <- system.time(
+  bf_result <- brute_force_knapsack(x = knapsack_objects[1:16, ], W = 2000)
+)
+bf_time
+```
+
+With $n=16$, there are $2^{16}-1=65535$ non-empty subsets. The measured elapsed
+time on this machine is **`r round(unname(bf_time["elapsed"]), 3)` seconds**.
+The brute-force method scales exponentially, $O(2^n)$.
+
+## 3.2 Dynamic programming
+
+Dynamic programming exploits integer weights and reuses results for smaller
+subproblems. With $m[i,c]$ denoting the maximum value achievable from the
+first $i$ items with capacity $c$, the recurrence is
+
+$$
+m[i,c] =
+\begin{cases}
+m[i-1,c], & w_i > c,\\
+\max\{m[i-1,c],\;m[i-1,c-w_i]+v_i\}, & w_i \le c.
+\end{cases}
+$$
+
+```{r dynamic}
+knapsack_dynamic(x = knapsack_objects[1:8, ], W = 3500)
+knapsack_dynamic(x = knapsack_objects[1:8, ], W = 2000)
+```
+
+**Question 2: How much time does it take for $n=500$ objects?**
+
+```{r dynamic-time}
+dp_time <- system.time(
+  kd <- knapsack_dynamic(x = knapsack_objects[1:500, ], W = 3500)
+)
+dp_time
+kd$value
+```
+
+For $n=500$ and $W=3500$, approximately $500\times3500=1.75$ million
+states may be considered. The measured elapsed time is
+**`r round(unname(dp_time["elapsed"]), 3)` seconds**. This is a
+pseudo-polynomial-time algorithm with complexity $O(nW)$.
+
+## 3.3 Greedy heuristic
+
+The greedy method ranks items by value-to-weight ratio ($v_i/w_i$) and
+selects feasible items in that order. This heuristic is fast but, without
+additional modifications, is **not guaranteed** to find the optimal 0–1
+knapsack solution or achieve a universal 50% approximation bound.
+
+```{r greedy}
+greedy_knapsack(x = knapsack_objects[1:800, ], W = 3500)
+greedy_knapsack(x = knapsack_objects[1:1200, ], W = 2000)
+```
+
+**Question 3: How much time does it take for $n=1,000,000$ objects?**
+
+This benchmark may use substantial memory and time. Run it manually to obtain
+a machine-specific measurement; it is disabled for routine vignette builds.
+
+```{r greedy-time, eval=FALSE}
+set.seed(42, kind = "Mersenne-Twister", normal.kind = "Inversion")
+big <- data.frame(
+  w = sample(1:4000, 1e6, replace = TRUE),
+  v = runif(1e6, 0, 10000)
+)
+system.time(gk <- greedy_knapsack(x = big, W = 3500))
+```
+
+The runtime for one million objects should be inserted here after running the
+code on the target machine. For a sorting-based implementation, expected
+complexity is $O(n\log n)$.
+
+# 4 Test suite
+
+The package contains tests under `tests/testthat/`, including tests for brute
+force, greedy search and dynamic programming. Run the test suite from the
+package root:
+
+```{r run-tests, eval=FALSE}
+devtools::test()
+```
+
+# 5 Profiling and optimisation
+
+**Question 4: What performance gain could be obtained by improving the code?**
+
+Profiling identifies bottlenecks, whereas benchmarking measures the size of an
+improvement. The following `profvis` calls can be run interactively in RStudio.
+They are included for reproducibility but not evaluated during HTML vignette
+creation.
+
+```{r profiling, eval=FALSE}
+library(profvis)
+
+profvis({
+  brute_force_knapsack(x = knapsack_objects[1:20, ], W = 3500)
+})
+
+profvis({
+  for (i in 1:50) {
+    greedy_knapsack(x = knapsack_objects[1:2000, ], W = 2000)
+  }
+})
+
+profvis({
+  knapsack_dynamic(x = knapsack_objects[1:1000, ], W = 1000)
+})
+```
+
+The benchmark below compares the original dynamic-programming function with
+`knapsack_dynamic_opt()`. It assumes that the optimised function exists in the
+package or has been loaded into the session. We first verify the returned
+value, then measure the time. Use the benchmark manually if installation of
+`bench` or prolonged runtime is an issue.
+
+```{r benchmark-dynamic, eval=FALSE}
+library(bench)
+x_bench <- knapsack_objects[1:1200, ]
+W_bench <- 2000
+
+original_result <- knapsack_dynamic(x = x_bench, W = W_bench)
+optimized_result <- knapsack_dynamic_opt(x = x_bench, W = W_bench)
+stopifnot(isTRUE(all.equal(original_result$value, optimized_result$value)))
+
+benchmark_results <- bench::mark(
+  original = knapsack_dynamic(x = x_bench, W = W_bench),
+  optimized = knapsack_dynamic_opt(x = x_bench, W = W_bench),
+  check = FALSE,
+  iterations = 20
+)
+print(benchmark_results)
+
+original_seconds <- as.numeric(benchmark_results$median[1])
+optimized_seconds <- as.numeric(benchmark_results$median[2])
+speedup <- original_seconds / optimized_seconds
+cat("Dynamic programming speedup:", round(speedup, 2), "x\n")
+```
+
+After running the benchmark, report the original median runtime, optimised
+median runtime and measured speedup here. Describe the specific code changes
+and bottlenecks seen in `profvis`; do not claim a gain without measured results.
+
+
+
+# 7 Optional: parallel brute-force search
+
+**Question5: What performance gain could be obtained by parallelising brute-force search?**
+
+This comparison requires the `parallel` argument in
+`brute_force_knapsack()`. Parallel startup and communication overhead can
+outweigh the benefit for small problem sizes.
+
+```{r benchmark-parallel, eval=TRUE}
+library(microbenchmark)
+x_test <- knapsack_objects[1:16, ]
+W_test <- 3500
+
+serial_result <- brute_force_parallel(x_test, W_test, parallel = FALSE)
+parallel_result <- brute_force_parallel(x_test, W_test, parallel = FALSE)
+stopifnot(isTRUE(all.equal(serial_result$value, parallel_result$value)))
+
+bm <- microbenchmark(
+  serial = brute_force_parallel(x_test, W_test, parallel = FALSE),
+  parallel = brute_force_parallel(x_test, W_test, parallel = FALSE),
+  times = 10
+)
+print(bm)
+
+serial_ns <- median(bm$time[bm$expr == "serial"])
+parallel_ns <- median(bm$time[bm$expr == "parallel"])
+cat("Parallel speedup:", round(serial_ns / parallel_ns, 2), "x\n")
+```
+
+Record the benchmark times, processor/core configuration, and observed
+speedup. A speedup less than 1 means the parallel run was slower.
+
+
+# 6 Optional: implementation using Rcpp and C++
+
+**Question6: What performance gain could be obtained by using Rcpp and C++?**
+
+This comparison applies only if `greedy_knapsack()` provides the `fast`
+argument to switch between the R and C++ implementations. We pass the same
+data and capacity to both methods. Run the benchmark manually.
+
+```{r benchmark-rcpp, eval=FALSE}
+library(microbenchmark)
+x_rcpp <- knapsack_objects[1:2000, ]
+W_rcpp <- 3500
+
+r_result <- greedy_knapsack(x_rcpp, W_rcpp, fast = FALSE)
+cpp_result <- greedy_knapsack(x_rcpp, W_rcpp, fast = TRUE)
+# Verify the value returned by the two implementations:
+stopifnot(isTRUE(all.equal(r_result$value, cpp_result$value)))
+
+benchmark_rcpp <- microbenchmark(
+  R = greedy_knapsack(x_rcpp, W_rcpp, fast = FALSE),
+  Rcpp = greedy_knapsack(x_rcpp, W_rcpp, fast = TRUE),
+  times = 1000
+)
+print(benchmark_rcpp)
+
+median_R_ns <- median(benchmark_rcpp$time[benchmark_rcpp$expr == "R"])
+median_Rcpp_ns <- median(benchmark_rcpp$time[benchmark_rcpp$expr == "Rcpp"])
+cat("R median:", median_R_ns / 1000, "microseconds\n")
+cat("Rcpp median:", median_Rcpp_ns / 1000, "microseconds\n")
+cat("Rcpp speedup:", round(median_R_ns / median_Rcpp_ns, 2), "x\n")
+```
+
+Record the measured speedup and briefly discuss the costs of calling compiled
+code as well as the computational work accelerated by C++.
+
+# 8 Conclusions
+
+This lab demonstrates how algorithmic complexity determines tractable problem
+sizes. Brute-force search is exact but exponential, dynamic programming is
+exact and pseudo-polynomial in capacity, and ratio-based greedy search offers
+faster approximate solutions. Profiling helps locate bottlenecks, while
+carefully controlled benchmarks can quantify improvements due to optimised R
+code, Rcpp and parallel computing. The final report should include the actual
+measured gains before making numerical performance claims.

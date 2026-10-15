@@ -50,7 +50,6 @@ This Rcpp prototype preserves the original $O(n\log n)$ greedy complexity; speed
 
 Benchmarks are reported separately from profiling so that speedups can be calculated from measured execution times rather than assumed.
 
-
 # 2 Data
 
 The package includes `knapsack_objects`, a reproducible data set with 2000 items.
@@ -299,3 +298,56 @@ faster approximate solutions. Profiling helps locate bottlenecks, while
 carefully controlled benchmarks can quantify improvements due to optimised R
 code, Rcpp and parallel computing. The final report should include the actual
 measured gains before making numerical performance claims.
+
+
+
+```{r benchmark_table, warning=FALSE, message=FALSE, echo=FALSE}
+library(microbenchmark)
+library(tibble)
+library(knitr)
+library(knapsack)
+
+n_vec <- c(20, 35, 60)
+W_vec <- c(50, 200)
+res_table <- tibble()
+
+set.seed(123)
+
+for(n in n_vec){
+  for(W in W_vec){
+    items <- tibble(
+      w = sample(1:W, size = n, replace = TRUE),
+      v = sample(5:50, size = n, replace = TRUE)
+    )
+    
+    if(n < 30){
+      t_brute <- median(microbenchmark(brute_force_knapsack(x = items, W = W), times = 5)$time)/1e6
+    }else{
+      t_brute <- NA
+    }
+    
+    t_dp <- median(microbenchmark(knapsack_dynamic(x = items, W = W), times =5)$time)/1e6
+    t_dp_opt <- median(microbenchmark(knapsack_dynamic_opt(x = items, W = W), times =5)$time)/1e6
+    t_greedy <- median(microbenchmark(greedy_knapsack(x = items, W = W), times =5)$time)/1e6
+    
+    row <- tibble(
+      n_items = n,
+      capacity_W = W,
+      Brute_force_ms = round(t_brute,2),
+      DP_original_ms = round(t_dp,2),
+      DP_optimized_ms = round(t_dp_opt,2),
+      Greedy_ms = round(t_greedy,2)
+    )
+    res_table <- rbind(res_table, row)
+  }
+}
+
+kable(res_table,
+      caption = "Median runtime (milliseconds) for different problem sizes n and knapsack capacity W. NA = computationally infeasible within reasonable time. DP original uses nested loops; DP optimized uses vectorization to reduce runtime.",
+      col.names = c("Number of items (n)","Capacity W","Brute‑force (ms)","Original DP (ms)","Optimized DP (ms)","Greedy (ms)"))
+```
+
+Table above illustrates runtime behaviour across three algorithms.
+Brute‑force with exponential \(O(2^n)\) complexity quickly becomes intractable as n grows beyond 30.
+Dynamic programming scales linearly with n but slows down for larger knapsack capacity W due to its \(O(nW)\) pseudo‑polynomial complexity.
+The greedy implementation maintains very low runtime across all tested sizes, but it only produces an approximate solution and does not guarantee the optimal result.

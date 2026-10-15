@@ -22,7 +22,8 @@ Suggests:
     knitr,
     rmarkdown,
     testthat (>= 3.0.0),
-    microbenchmark
+    microbenchmark,
+    tibble
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.1.1
 VignetteBuilder: knitr

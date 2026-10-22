@@ -2,18 +2,21 @@
 % Please edit documentation in R/brute_force_knapsack.R
 \name{brute_force_knapsack}
 \alias{brute_force_knapsack}
-\title{Brute Force Knapsack}
+\title{Brute Force Knapsack with Parallel Computing}
 \usage{
-brute_force_knapsack(x, W)
+brute_force_knapsack(x, W, parallel = FALSE)
 }
 \arguments{
 \item{x}{A data.frame containing w and v}
 
 \item{W}{Maximum knapsack weight}
+
+\item{parallel}{Logical, if TRUE run in parallel across
+detected cores. Default FALSE.}
 }
 \value{
 A list with maximum value and selected elements
 }
 \description{
-Brute Force Knapsack
+Brute Force Knapsack with Parallel Computing
 }

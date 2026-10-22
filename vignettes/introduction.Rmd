@@ -203,20 +203,6 @@ profvis({
 })
 ```
 
-We demonstrate the benchmark workflow for our dynamic-programming implementation. No separate optimized version is included in this package. The following optional benchmark is not run when building the vignette.
-
-```{r benchmark-dynamic, eval=FALSE}
-library(bench)
-x_bench <- knapsack_objects[1:1200, ]
-W_bench <- 2000
-
-benchmark_results <- bench::mark(
-  original = knapsack_dynamic(x = x_bench, W = W_bench),
-  check = FALSE,
-  iterations = 20
-)
-print(benchmark_results)
-```
 
 # 6 Optional: parallel brute-force search
 
@@ -226,7 +212,7 @@ This comparison requires the `parallel` argument in
 `brute_force_knapsack()`. Parallel startup and communication overhead can
 outweigh the benefit for small problem sizes.
 
-```{r benchmark-parallel, eval=TRUE}
+```{r benchmark-parallel, eval=FALSE}
 library(microbenchmark)
 
 # 1. Create the same test data for both methods
@@ -268,29 +254,49 @@ Both versions use the same 18 items and knapsack capacity (W = 3500). They retur
 We used `microbenchmark()` to compare their execution times, running each version five times.
 
 
-**Benchmark results:**
-
-| Method | Median time |
-|---|---|
-| Serial | `r round(serial_ns / 1e9, 3)` seconds |
-| Parallel | `r round(parallel_ns / 1e9, 3)` seconds |
-
-The observed parallel speedup was approximately
-`r round(serial_ns / parallel_ns, 2)`x.
-
-`r if (serial_ns > parallel_ns) {
-  "The parallel version was faster than the serial version."
-} else if (serial_ns < parallel_ns) {
-  "The serial version was faster than the parallel version."
-} else {
-  "Both versions had the same median execution time."
-}`
-
+Benchmark timings are collected manually by running the `eval=FALSE` code chunk.
 The results may vary depending on the problem size,
 CPU performance, and parallel overhead.
 
+# 7 Optional: implementation using Rcpp and C++
 
-# 7 Conclusions
+**Question6: What performance gain could be obtained by using Rcpp and C++?**
+
+This starred exercise was not selected for submission; we only performed local prototype testing and abandoned full implementation for cross‑platform compatibility reasons.
+
+We prototyped an Rcpp‑accelerated greedy implementation locally. However, we do **not** include the compiled C++ version inside the final package due to cross‑platform compiler compatibility issues. The code block only demonstrates benchmark workflow and will not be executed.
+
+This comparison applies only if `greedy_knapsack()` provides the `fast`
+argument to switch between the R and C++ implementations. We pass the same
+data and capacity to both methods. Run the benchmark manually.
+
+```{r benchmark-rcpp, eval=FALSE}
+library(microbenchmark)
+x_rcpp <- knapsack_objects[1:2000, ]
+W_rcpp <- 3500
+
+r_result <- greedy_knapsack(x_rcpp, W_rcpp, fast = FALSE)
+cpp_result <- greedy_knapsack(x_rcpp, W_rcpp, fast = TRUE)
+# Verify the value returned by the two implementations:
+stopifnot(isTRUE(all.equal(r_result$value, cpp_result$value)))
+
+benchmark_rcpp <- microbenchmark(
+  R = greedy_knapsack(x_rcpp, W_rcpp, fast = FALSE),
+  Rcpp = greedy_knapsack(x_rcpp, W_rcpp, fast = TRUE),
+  times = 1000
+)
+print(benchmark_rcpp)
+
+median_R_ns <- median(benchmark_rcpp$time[benchmark_rcpp$expr == "R"])
+median_Rcpp_ns <- median(benchmark_rcpp$time[benchmark_rcpp$expr == "Rcpp"])
+cat("R median:", median_R_ns / 1000, "microseconds\n")
+cat("Rcpp median:", median_Rcpp_ns / 1000, "microseconds\n")
+cat("Rcpp speedup:", round(median_R_ns / median_Rcpp_ns, 2), "x\n")
+```
+Record the measured speedup and briefly discuss the costs of calling compiled
+code as well as the computational work accelerated by C++.
+
+# 8 Conclusions
 
 This lab demonstrates how algorithmic complexity determines tractable problem
 sizes. Brute-force search is exact but exponential, dynamic programming is
@@ -299,7 +305,6 @@ faster approximate solutions. Profiling helps locate bottlenecks, while
 carefully controlled benchmarks can measure the effect of parallel computing.
 The parallel implementation is controlled through the `parallel` argument of
 `brute_force_knapsack()`, with benchmark results reported above.
-
 
 
 ```{r benchmark_table, warning=FALSE, message=FALSE, echo=FALSE}
@@ -350,3 +355,5 @@ Table above illustrates runtime behaviour across three algorithms.
 Brute‑force with exponential \(O(2^n)\) complexity quickly becomes intractable as n grows beyond 30.
 Dynamic programming scales linearly with n but slows down for larger knapsack capacity W due to its \(O(nW)\) pseudo‑polynomial complexity.
 The greedy implementation maintains very low runtime across all tested sizes, but it only produces an approximate solution and does not guarantee the optimal result.
+
+Per lab instructions, master students only need to complete one starred exercise. We fulfilled the parallel brute‑force search task.
